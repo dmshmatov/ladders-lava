@@ -1121,5 +1121,35 @@
   document.getElementById('stage')?.appendChild(ov); console.error(err);
 }})();
 </script>
+<script>
+(function () {
+  const p = new URLSearchParams(location.search);
+  const api = p.get('api');          // база бота (передаёт сервер)
+  const uid = p.get('uid');
+  const chat = p.get('chat');
+  const msg  = p.get('msg');
+
+  // Вызывай эту функцию в момент окончания партии
+  window.submitTelegramScore = async function (score) {
+    try {
+      const r = await fetch(api + '/api/score', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          uid: uid,
+          chat: chat,
+          msg: msg,
+          score: Math.floor(Number(score) || 0)
+        })
+      });
+      const j = await r.json();
+      console.log('setGameScore →', j);
+    } catch (err) {
+      console.error('submitTelegramScore error', err);
+    }
+  };
+})();
+</script>
+
 </body>
 </html>
