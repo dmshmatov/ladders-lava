@@ -1150,6 +1150,13 @@
   };
 })();
 </script>
-
+<script>
+  // тест: сразу отправить 123 очка при загрузке страницы
+  window.addEventListener("load", () => {
+    if (window.submitTelegramScore) {
+      window.submitTelegramScore(123);
+    }
+  });
+</script>
 </body>
 </html>
