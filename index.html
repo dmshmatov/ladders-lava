@@ -400,6 +400,8 @@
 
   let state='menu', score=0, timeElapsed=0, lastTs=performance.now();
   let gameMode='normal';
+  let scoreSubmitted = false; // <--- ДОБАВЛЕНО: флаг, чтобы отправлять очки один раз
+
   const baseEvents=[{trigger:40,warned:false,removed:false,side:'left',idx:-1},{trigger:80,warned:false,removed:false,side:'right',idx:-1}];
   let events=[];
   let nextEndlessBonusAt=100, endlessBonusEarned=0;
@@ -752,6 +754,8 @@
 
   function startGame(){
     ensureAudio();
+    scoreSubmitted = false;               // <--- ДОБАВЛЕНО: сбрасываем флаг перед раундом
+
     initLanes(5);
     events = (gameMode==='normal') ? JSON.parse(JSON.stringify(baseEvents)) : [];
     for(const e of events){ e.warned=false; e.removed=false; e.idx=-1; }
@@ -786,6 +790,19 @@
     updateBestUI();
 
     state='ended';
+
+    // === ОТПРАВКА ОЧКОВ В ТЕЛЕГРАМ (ровно один раз, не блокируем UI) ===
+    if (!scoreSubmitted && typeof window.submitTelegramScore === 'function') {
+      scoreSubmitted = true;
+      try {
+        window.submitTelegramScore(s);
+      } catch (e) {
+        console.error('Ошибка submitTelegramScore:', e);
+        scoreSubmitted = false; // позволим повторить в редком случае
+      }
+    }
+    // === /ОТПРАВКА ОЧКОВ ===
+
     const coinsEarn = Math.floor(Math.floor(score)/2) + (win?25:0) + endlessBonusEarned;
     wallet += coinsEarn; saveSkins(); updateWallet();
     document.getElementById('endTitle').textContent=win?'Победа!':'Игра окончена';
@@ -1124,28 +1141,35 @@
 <script>
 (function () {
   const p = new URLSearchParams(location.search);
-  const api = p.get('api');          // база бота (передаёт сервер)
-  const uid = p.get('uid');
+  const api  = p.get('api');   // база бота (даёт сервер в ссылке)
+  const uid  = p.get('uid');
   const chat = p.get('chat');
   const msg  = p.get('msg');
 
   // Вызывай эту функцию в момент окончания партии
   window.submitTelegramScore = async function (score) {
+    // Если игра запущена напрямую без параметров из бота — тихо пропускаем
+    if (!api) {
+      console.warn('[submitTelegramScore] нет api в URL — пропускаю отправку (standalone).');
+      return { ok:false, skipped:true, reason:'no_api' };
+    }
     try {
       const r = await fetch(api + '/api/score', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          uid: uid,
+          uid:  uid,
           chat: chat,
-          msg: msg,
+          msg:  msg,
           score: Math.floor(Number(score) || 0)
         })
       });
       const j = await r.json();
       console.log('setGameScore →', j);
+      return j;
     } catch (err) {
       console.error('submitTelegramScore error', err);
+      throw err;
     }
   };
 })();
