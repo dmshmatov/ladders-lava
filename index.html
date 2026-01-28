@@ -105,7 +105,6 @@
         <div class="badges" id="buffBadges" aria-live="polite"></div>
       </div>
 
-      <!-- Главное меню -->
       <div class="overlay show" id="mainMenu">
         <div class="card">
           <div class="title">Ladders & Lava — 2D</div>
@@ -134,7 +133,6 @@
         </div>
       </div>
 
-      <!-- Выбор режима -->
       <div class="overlay" id="modeMenu">
         <div class="card">
           <div class="title">Выбери режим</div>
@@ -148,7 +146,6 @@
         </div>
       </div>
 
-      <!-- Магазин -->
       <div class="overlay" id="shopMenu">
         <div class="card" style="min-width:320px;">
           <div class="title">Магазин скинов</div>
@@ -201,7 +198,6 @@
         </div>
       </div>
 
-      <!-- Промокод -->
       <div class="overlay" id="promoMenu">
         <div class="card" style="min-width:300px;">
           <div class="title">Промокод</div>
@@ -219,7 +215,6 @@
         </div>
       </div>
 
-      <!-- Настройки -->
       <div class="overlay" id="settingsMenu">
         <div class="card">
           <div class="title">Настройки</div>
@@ -234,7 +229,6 @@
         </div>
       </div>
 
-      <!-- Пауза -->
       <div class="overlay" id="pauseMenu">
         <div class="card">
           <div class="title">Пауза</div>
@@ -246,7 +240,6 @@
         </div>
       </div>
 
-      <!-- Финал -->
       <div class="overlay" id="endOverlay">
         <div class="card">
           <div class="title" id="endTitle">Игра окончена</div>
@@ -255,7 +248,6 @@
         </div>
       </div>
 
-      <!-- Поверните устройство -->
       <div class="overlay rotate" id="rotateOverlay">
         <div class="card"><div>Поверните устройство вертикально</div></div>
       </div>
@@ -380,7 +372,7 @@
   const juices=[]; let juiceTimer=0;
 
   const flakes=[]; let flakeTimer=5; const FLAKE_INTERVAL=5; const FLAKE_CHANCE=0.15;
-  let slowT=0; let slowMul=1.0; const SLOW_DURATION=5; const SLOW_MUL=0.65;
+  let slowT=0; let slowMul=1.0; const SLOW_DURATION=5; const SLOW_MUL=0.5;
 
   let wall=null; let abilityCD=0; const ABILITY_COOLDOWN=60;
 
@@ -417,6 +409,10 @@
     buffBadges.innerHTML='';
     if(slowT>0){
       const b=document.createElement('div'); b.className='badge'; b.textContent=`❄ ${slowT.toFixed(1)}s`;
+      buffBadges.appendChild(b);
+    }
+    if(invulnT>0){
+      const b=document.createElement('div'); b.className='badge'; b.textContent=`🍊 ${invulnT.toFixed(1)}s`;
       buffBadges.appendChild(b);
     }
   }
