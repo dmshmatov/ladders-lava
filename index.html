@@ -447,20 +447,21 @@ const SUPABASE_ANON_KEY = 'sb_publishable_lLDUCtd2SXFo-FZk2GoHuw_eB8t_Ri3';
 
 async function submitSupabaseScore(score) {
   try {
-    const tgUser = window.Telegram?.WebApp?.initDataUnsafe?.user || null;
+    const p = new URLSearchParams(location.search);
+    const uid = p.get('uid');
 
     const payload = {
-      telegram_user_id: tgUser?.id ?? null,
-      username: tgUser?.username ?? null,
-      first_name: tgUser?.first_name ?? null,
+      telegram_user_id: uid ? Number(uid) : null,
+      username: null,
+      first_name: null,
       best_score: Math.floor(Number(score) || 0),
       last_score: Math.floor(Number(score) || 0),
       games_played: 1
     };
 
     if (!payload.telegram_user_id) {
-      console.warn('[submitSupabaseScore] нет telegram_user_id, пропускаю запись в leaderboard.');
-      return { ok:false, skipped:true, reason:'no_telegram_user_id' };
+      console.warn('[submitSupabaseScore] нет uid в URL, пропускаю запись.');
+      return;
     }
 
     const r = await fetch(SUPABASE_URL + '/rest/v1/leaderboard', {
@@ -475,15 +476,11 @@ async function submitSupabaseScore(score) {
     });
 
     if (!r.ok) {
-      const errText = await r.text();
-      console.error('[submitSupabaseScore] Supabase error:', r.status, errText);
-      return { ok:false, status:r.status, error:errText };
+      const t = await r.text();
+      console.error('Supabase error', r.status, t);
     }
-
-    return { ok:true };
-  } catch (err) {
-    console.error('[submitSupabaseScore] error', err);
-    return { ok:false, error:String(err) };
+  } catch(e) {
+    console.error('submitSupabaseScore error', e);
   }
 }
 // === /Supabase leaderboard ===
