@@ -451,15 +451,13 @@ async function submitSupabaseScore(score) {
     const uid = p.get('uid');
 
     const payload = {
-      telegram_user_id: uid ? Number(uid) : null,
-      username: null,
-      first_name: null,
-      best_score: Math.floor(Number(score) || 0),
-      last_score: Math.floor(Number(score) || 0),
-      games_played: 1
+      p_telegram_user_id: uid ? Number(uid) : null,
+      p_username: null,
+      p_first_name: null,
+      p_score: Math.floor(Number(score) || 0)
     };
 
-    if (!payload.telegram_user_id) {
+    if (!payload.p_telegram_user_id) {
       console.warn('[submitSupabaseScore] нет uid в URL, пропускаю запись.');
       return;
     }
@@ -469,15 +467,16 @@ async function submitSupabaseScore(score) {
       headers: {
         'Content-Type': 'application/json',
         'apikey': SUPABASE_ANON_KEY,
-        'Authorization': 'Bearer ' + SUPABASE_ANON_KEY,
-        'Prefer': 'resolution=merge-duplicates,return=minimal'
+        'Authorization': 'Bearer ' + SUPABASE_ANON_KEY
       },
       body: JSON.stringify(payload)
     });
 
+    const t = await r.text();
+    console.log('[submitSupabaseScore] status =', r.status, 'response =', t);
+
     if (!r.ok) {
-      const t = await r.text();
-      console.error('Supabase error', r.status, t);
+      console.error('Supabase RPC error', r.status, t);
     }
   } catch(e) {
     console.error('submitSupabaseScore error', e);
