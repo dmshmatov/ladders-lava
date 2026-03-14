@@ -440,6 +440,54 @@
 
 <script>
 (()=>{ try {
+
+// === Supabase leaderboard ===
+const SUPABASE_URL = 'https://mhbuuvysmlzqbbgoarqd.supabase.co';
+const SUPABASE_ANON_KEY = 'sb_publishable_lLDUCtd2SXFo-FZk2GoHuw_eB8t_Ri3';
+
+async function submitSupabaseScore(score) {
+  try {
+    const tgUser = window.Telegram?.WebApp?.initDataUnsafe?.user || null;
+
+    const payload = {
+      telegram_user_id: tgUser?.id ?? null,
+      username: tgUser?.username ?? null,
+      first_name: tgUser?.first_name ?? null,
+      best_score: Math.floor(Number(score) || 0),
+      last_score: Math.floor(Number(score) || 0),
+      games_played: 1
+    };
+
+    if (!payload.telegram_user_id) {
+      console.warn('[submitSupabaseScore] нет telegram_user_id, пропускаю запись в leaderboard.');
+      return { ok:false, skipped:true, reason:'no_telegram_user_id' };
+    }
+
+    const r = await fetch(SUPABASE_URL + '/rest/v1/leaderboard', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': SUPABASE_ANON_KEY,
+        'Authorization': 'Bearer ' + SUPABASE_ANON_KEY,
+        'Prefer': 'resolution=merge-duplicates,return=minimal'
+      },
+      body: JSON.stringify(payload)
+    });
+
+    if (!r.ok) {
+      const errText = await r.text();
+      console.error('[submitSupabaseScore] Supabase error:', r.status, errText);
+      return { ok:false, status:r.status, error:errText };
+    }
+
+    return { ok:true };
+  } catch (err) {
+    console.error('[submitSupabaseScore] error', err);
+    return { ok:false, error:String(err) };
+  }
+}
+// === /Supabase leaderboard ===
+
   const stage  = document.getElementById('stage');
   const canvas = document.getElementById('game');
   const ctx = canvas.getContext('2d');
@@ -2231,6 +2279,7 @@ function initCaveStalactites(){
       scoreSubmitted = true;
       try {
         window.submitTelegramScore(s);
+        submitSupabaseScore(s);
       } catch (e) {
         console.error('Ошибка submitTelegramScore:', e);
         scoreSubmitted = false; // позволим повторить в редком случае
