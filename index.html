@@ -449,11 +449,14 @@ async function submitSupabaseScore(score) {
   try {
     const p = new URLSearchParams(location.search);
     const uid = p.get('uid');
+    const usernameFromUrl = p.get('uname');
+    const firstNameFromUrl = p.get('fname');
+    const tgUser = window.Telegram?.WebApp?.initDataUnsafe?.user || null;
 
     const payload = {
       p_telegram_user_id: uid ? Number(uid) : null,
-      p_username: null,
-      p_first_name: null,
+      p_username: usernameFromUrl || tgUser?.username || null,
+      p_first_name: firstNameFromUrl || tgUser?.first_name || null,
       p_score: Math.floor(Number(score) || 0)
     };
 
