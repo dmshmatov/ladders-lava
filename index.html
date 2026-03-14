@@ -37,8 +37,12 @@
   .btn { -webkit-tap-highlight-color:transparent; -webkit-touch-callout:none; -webkit-user-select:none; user-select:none; touch-action:manipulation; background:rgba(255,255,255,.95); border:1px solid rgba(0,0,0,.12); color:var(--ui); font-weight:700; padding:10px 14px; border-radius:12px; cursor:pointer; }
   .btn:active, .btn.touch-pressed{ transform:translateY(1px); }
 
-  .overlay { position:absolute; inset:0; display:none; align-items:center; justify-content:center; text-align:center; pointer-events:auto; }
+  .overlay { position:absolute; inset:0; display:none; align-items:center; justify-content:center; text-align:center; pointer-events:auto; z-index:10; }
   .overlay.show { display:flex; background:rgba(0,0,0,.25); }
+  #infoOverlay { z-index:20; }
+  #infoOverlay.show { background:rgba(0,0,0,.45); }
+  #infoOverlay .card { position:relative; z-index:21; }
+  .stage.info-open .skin-canvas { visibility:hidden; }
   .card { background:rgba(255,255,255,.96); padding:18px 20px; border-radius:14px; border:1px solid rgba(0,0,0,.08); box-shadow:0 10px 28px rgba(0,0,0,.25); max-width:92%; }
 
   /* мобильный скролл в оверлеях */
@@ -928,7 +932,7 @@
 
   function computeLaneX(){ laneX.length=0; const padding=56, inner=WORLD_W-padding*2; const step=(lanes.length>1)?inner/(lanes.length-1):0; for(let i=0;i<lanes.length;i++) laneX.push(padding+step*i); }
   function initLanes(n){ lanes=Array.from({length:n},()=>({state:'normal',fallT:0})); computeLaneX(); }
-  function show(el){ el.classList.add('show'); } function hide(el){ el.classList.remove('show'); }
+  function show(el){ el.classList.add('show'); if(el===infoOverlay) stage.classList.add('info-open'); } function hide(el){ el.classList.remove('show'); if(el===infoOverlay) stage.classList.remove('info-open'); }
   function updateHUD(){ scoreEl.textContent=`Очки: ${Math.floor(score)}`; timeEl.textContent=`Время: ${Math.floor(timeElapsed)}s`; updateBuffHUD(); }
   function saveLevelProgress(){
     storage.setItem('level1_completed', level1Completed ? '1' : '0');
