@@ -938,11 +938,22 @@ async function submitSupabaseScore(score) {
 
   let invulnT=0, angelLife=false;
   let stoneShieldT=0;
+  let bananaPowerT=0;
+  let cactusPowerT=0;
+  let cactusPowerCharges=0;
 
   const rocks=[]; let spawnTimer=0; const particles=[]; const floatTexts=[];
   const coins=[]; let coinTimer=0; const nextCoinTime=()=>12000+Math.random()*6000; const coinSpeed=()=>140;
+  const MAGNET_PULL_DURATION=1.0;
 
   const juices=[]; let juiceTimer=0;
+
+  const bananas=[]; let jungleScoreForBananas=0; const nextBananaGap=()=>15 + Math.random()*20; let nextBananaAt=nextBananaGap();
+  const mosses=[]; let mountainsScoreForMoss=0; const nextMossGap=()=>15 + Math.random()*20; let nextMossAt=nextMossGap();
+  const MOSS_ROCK_FREEZE_DURATION=3;
+  let laneRockFreezeT=[];
+  const cactuses=[]; let desertScoreForCactuses=0; const nextCactusGap=()=>15 + Math.random()*20; let nextCactusAt=nextCactusGap();
+  const blizzards=[]; let winterScoreForBlizzards=0; const nextBlizzardGap=()=>15 + Math.random()*20; let nextBlizzardAt=nextBlizzardGap(); const BLIZZARD_DURATION=10; const BLIZZARD_SAFE_TIME=3;
 
   const flakes=[]; let flakeTimer=5; const FLAKE_INTERVAL=5; const FLAKE_CHANCE=0.15;
   let slowT=0; let slowMul=1.0; const SLOW_DURATION_DEFAULT=3; const SLOW_DURATION_ICE=5; const SLOW_MUL=0.5;
@@ -1010,7 +1021,15 @@ async function submitSupabaseScore(score) {
   let deathTimer=0;
 
   function computeLaneX(){ laneX.length=0; const padding=56, inner=WORLD_W-padding*2; const step=(lanes.length>1)?inner/(lanes.length-1):0; for(let i=0;i<lanes.length;i++) laneX.push(padding+step*i); }
-  function initLanes(n){ lanes=Array.from({length:n},()=>({state:'normal',fallT:0})); computeLaneX(); }
+  function initLanes(n){ lanes=Array.from({length:n},()=>({state:'normal',fallT:0})); laneRockFreezeT=Array.from({length:n},()=>0); computeLaneX(); }
+  function laneHasMossFreeze(lane){ return (laneRockFreezeT[lane]||0) > 0; }
+  function getMossFreezeAffectedLanes(centerLane){
+    const out=[];
+    for(let lane=Math.max(0,centerLane-1); lane<=Math.min(lanes.length-1,centerLane+1); lane++){
+      if(lanes[lane] && lanes[lane].state==='normal') out.push(lane);
+    }
+    return out;
+  }
   function show(el){ el.classList.add('show'); if(el===infoOverlay) stage.classList.add('info-open'); } function hide(el){ el.classList.remove('show'); if(el===infoOverlay) stage.classList.remove('info-open'); }
   function updateHUD(){ scoreEl.textContent=`Очки: ${Math.floor(score)}`; timeEl.textContent=`Время: ${Math.floor(timeElapsed)}s`; updateBuffHUD(); }
   function saveLevelProgress(){
@@ -1138,6 +1157,14 @@ async function submitSupabaseScore(score) {
       const b=document.createElement('div'); b.className='badge'; b.textContent=`❄ ${slowT.toFixed(1)}s`;
       buffBadges.appendChild(b);
     }
+    if(bananaPowerT>0){
+      const b=document.createElement('div'); b.className='badge'; b.textContent=`💪 ${bananaPowerT.toFixed(1)}s`;
+      buffBadges.appendChild(b);
+    }
+    if(cactusPowerT>0 && cactusPowerCharges>0){
+      const b=document.createElement('div'); b.className='badge'; b.textContent=`🌵 ${cactusPowerT.toFixed(1)}s`;
+      buffBadges.appendChild(b);
+    }
     if(stoneShieldT>0){
       const b=document.createElement('div'); b.className='badge'; b.textContent=`🪨 ${stoneShieldT.toFixed(1)}s`;
       buffBadges.appendChild(b);
@@ -1262,19 +1289,15 @@ async function submitSupabaseScore(score) {
         storage.setItem('promo_free_claimed','1');
         promoMsg.textContent='Успех! +50 монет зачислено.';
       }
-    }else if(code==='ice_and_lava'){
-      if(storage.getItem('promo_ice_and_lava_claimed')==='1'){
+    }else if(code==='new_endless'){
+      if(storage.getItem('promo_new_endless_claimed')==='1'){
         promoMsg.textContent='Этот код уже был активирован.';
       }else{
         wallet += 50;
-        questFlakesUsed = Math.min(ICE_QUEST_FLAKES, questFlakesUsed + 2);
-        questWinterVisits = Math.min(ICE_QUEST_WINTER_VISITS, questWinterVisits + 5);
         saveSkins();
-        saveQuestProgress();
         updateWallet();
-        updateSpecialShopUI();
-        storage.setItem('promo_ice_and_lava_claimed','1');
-        promoMsg.textContent='Успех! +50 монет, +2 снежинки и +5 посещений снежного биома.';
+        storage.setItem('promo_new_endless_claimed','1');
+        promoMsg.textContent='Успех! +50 монет зачислено.';
       }
     }else{
       promoMsg.textContent='Неверный код.';
@@ -1412,9 +1435,38 @@ async function submitSupabaseScore(score) {
   function drawMountainRange(off,scale,amp){ ctx.beginPath(); ctx.moveTo(0,WORLD_H*0.55+off);
     for(let x=0;x<=WORLD_W;x+=16){ const y=WORLD_H*0.55+off - Math.abs(Math.sin((x+off)*0.01))*amp*scale; ctx.lineTo(x,y); }
     ctx.lineTo(WORLD_W,WORLD_H); ctx.lineTo(0,WORLD_H); ctx.closePath(); ctx.fill(); }
-  function drawForestBelt(off){ const base=WORLD_H*0.62+off; const h=60;
-    for(let x=-20;x<WORLD_W+20;x+=10){ const treeH=h*0.6+((x*13.37)%50)*0.2; ctx.fillRect(x,base-treeH,6,treeH);
-      ctx.beginPath(); ctx.moveTo(x-6,base-treeH); ctx.lineTo(x+3,base-treeH-18); ctx.lineTo(x+12,base-treeH); ctx.closePath(); ctx.fill(); } }
+  function drawForestBelt(off,hillOff=off){ const base=WORLD_H*0.62+off;
+    const endlessForest = (gameMode==='endless' && bgMode==='mountains');
+    const step = endlessForest ? 12 : 10;
+    const screenShift = endlessForest ? (hillOff % step) : 0;
+    for(let x=-20-step-screenShift;x<WORLD_W+20+step;x+=step){
+      const worldX = endlessForest ? (x + hillOff) : x;
+      const seed = Math.abs(Math.sin(worldX*12.9898))*43758.5453;
+      const rnd = seed - Math.floor(seed);
+      const widthSeed = Math.abs(Math.sin((worldX+73)*7.123))*24634.6345;
+      const widthRnd = widthSeed - Math.floor(widthSeed);
+      const treeH = endlessForest ? (34 + rnd*62) : (36 + rnd*12);
+      const trunkW = endlessForest ? (3 + Math.floor(widthRnd*7)) : 6;
+      const crownH = endlessForest ? (12 + rnd*20) : 18;
+      const trunkX = Math.round(x);
+      let treeBase = base;
+      if(endlessForest){
+        const mountainBaseY = WORLD_H*0.55 + hillOff;
+        const mountainTopY = mountainBaseY - Math.abs(Math.sin(worldX*0.01))*48;
+        const localSlope = Math.abs(Math.sin((worldX + 41)*0.035))*16;
+        treeBase = Math.min(base, mountainTopY + 24 + localSlope);
+      }
+      ctx.fillRect(trunkX, treeBase-treeH, trunkW, treeH);
+      const crownHalf = endlessForest ? (6 + widthRnd*6 + rnd*4) : 9;
+      const crownCenter = trunkX + trunkW*0.5;
+      ctx.beginPath();
+      ctx.moveTo(crownCenter-crownHalf, treeBase-treeH);
+      ctx.lineTo(crownCenter, treeBase-treeH-crownH);
+      ctx.lineTo(crownCenter+crownHalf, treeBase-treeH);
+      ctx.closePath();
+      ctx.fill();
+    }
+  }
   function drawMountains(scrollY,alpha,showForest=true){ ctx.save(); ctx.globalAlpha=alpha;
     ctx.fillStyle=renderCache.gradients.mountains; ctx.fillRect(0,0,WORLD_W,WORLD_H);
 
@@ -1431,7 +1483,7 @@ async function submitSupabaseScore(score) {
     ctx.fillStyle=farMountainColor; drawMountainRange(0.12*scrollY,0.6,90);
     ctx.fillStyle=nearMountainColor; drawMountainRange(0.2*scrollY,0.8,60);
 
-    if(showForest && !(gameMode==='normal' && currentLevel===3)){ ctx.fillStyle=forestColor; drawForestBelt(0.32*scrollY); }
+    if(showForest && !(gameMode==='normal' && currentLevel===3)){ ctx.fillStyle=forestColor; drawForestBelt(0.32*scrollY,0.2*scrollY); }
     ctx.restore(); }
 
   function drawWinter(scrollY,alpha){ ctx.save(); ctx.globalAlpha=alpha;
@@ -1446,10 +1498,63 @@ async function submitSupabaseScore(score) {
     }
     ctx.restore(); }
 
+  function drawDesertCactus(x, baseY, scale, color){
+    const h = 34*scale;
+    const trunkW = 9*scale;
+    const armW = 5.5*scale;
+    ctx.fillStyle = color;
+    ctx.fillRect(x - trunkW*0.5, baseY - h, trunkW, h);
+
+    const leftY = baseY - h*0.58;
+    ctx.fillRect(x - trunkW*1.25 - armW, leftY, armW, h*0.30);
+    ctx.fillRect(x - trunkW*1.25 - armW, leftY, trunkW*0.95 + armW, armW);
+
+    const rightY = baseY - h*0.74;
+    ctx.fillRect(x + trunkW*0.55, rightY, armW, h*0.28);
+    ctx.fillRect(x + trunkW*0.55, rightY, trunkW*0.95 + armW, armW);
+
+    ctx.fillStyle = 'rgba(255,255,255,.18)';
+    ctx.fillRect(x - trunkW*0.18, baseY - h + 4*scale, 1.6*scale, h - 8*scale);
+    ctx.fillRect(x + trunkW*0.1, baseY - h*0.9, 1.3*scale, h*0.74);
+    ctx.fillStyle = 'rgba(39,66,26,.18)';
+    ctx.fillRect(x - trunkW*0.5, baseY - h, trunkW*0.22, h);
+  }
+
   function drawDesert(scrollY,alpha){ ctx.save(); ctx.globalAlpha=alpha;
     ctx.fillStyle=renderCache.gradients.desert; ctx.fillRect(0,0,WORLD_W,WORLD_H);
     ctx.fillStyle='#d4a457'; drawMountainRange(0.1*scrollY,0.5,70);
     ctx.fillStyle='#c19445'; drawMountainRange(0.16*scrollY,0.7,50);
+
+    if(gameMode==='endless'){
+      const layers = [
+        { scroll:0.09, count:4, minY:WORLD_H*0.44, maxY:WORLD_H*0.64, scale:0.76, color:'rgba(132,192,92,.56)', seedOff:17.3 },
+        { scroll:0.14, count:5, minY:WORLD_H*0.52, maxY:WORLD_H*0.78, scale:0.92, color:'rgba(114,173,80,.72)', seedOff:29.5 },
+        { scroll:0.19, count:6, minY:WORLD_H*0.60, maxY:WORLD_H*0.90, scale:1.08, color:'rgba(88,146,60,.88)', seedOff:41.7 }
+      ];
+      const bgCacti = [];
+      for(const layer of layers){
+        const worldOff = scrollY * layer.scroll;
+        for(let i=0; i<layer.count; i++){
+          const seedBase = (i + 1) * 13.731 + layer.seedOff;
+          const xRnd = (Math.abs(Math.sin(seedBase * 1.173)) * 43758.5453) % 1;
+          const yRnd = (Math.abs(Math.sin(seedBase * 2.417)) * 24691.357) % 1;
+          const scaleRnd = (Math.abs(Math.sin(seedBase * 3.891)) * 97531.8642) % 1;
+          const driftRnd = (Math.abs(Math.sin(seedBase * 5.267)) * 13579.2468) % 1;
+          const baseWorldX = xRnd * WORLD_W;
+          const drift = (driftRnd - 0.5) * 48;
+          let cactusX = (baseWorldX - worldOff + drift) % (WORLD_W + 80);
+          if(cactusX < -40) cactusX += WORLD_W + 80;
+          const cactusBaseY = layer.minY + yRnd * (layer.maxY - layer.minY);
+          const cactusScale = layer.scale * (0.96 + scaleRnd * 0.34);
+          bgCacti.push({ x:cactusX, y:cactusBaseY, scale:cactusScale, color:layer.color });
+        }
+      }
+      bgCacti.sort((a,b)=>a.y-b.y);
+      for(let i=2; i<bgCacti.length; i++){
+        const c = bgCacti[i];
+        drawDesertCactus(c.x, c.y, c.scale, c.color);
+      }
+    }
     ctx.restore(); }
 
   function drawJungle(scrollY,alpha){ ctx.save(); ctx.globalAlpha=alpha;
@@ -1735,6 +1840,33 @@ function initCaveStalactites(){
       ctx.fillStyle='rgba(255,255,255,.08)';
       ctx.fillRect(r.x - w*0.4, r.y - h*0.35, w*0.6, h*0.2);
     }
+    if(laneHasMossFreeze(r.lane)){
+      ctx.save();
+      ctx.translate(r.x, r.y);
+      ctx.fillStyle='rgba(52,95,43,.95)';
+      ctx.beginPath();
+      ctx.ellipse(-w*0.18, h*0.04, w*0.16, h*0.10, -0.35, 0, Math.PI*2);
+      ctx.ellipse(0, -h*0.03, w*0.20, h*0.12, 0, 0, Math.PI*2);
+      ctx.ellipse(w*0.19, h*0.05, w*0.15, h*0.10, 0.28, 0, Math.PI*2);
+      ctx.fill();
+      ctx.fillStyle='rgba(109,181,75,.98)';
+      ctx.beginPath();
+      ctx.ellipse(-w*0.24, -h*0.10, w*0.11, h*0.12, -0.42, 0, Math.PI*2);
+      ctx.ellipse(-w*0.08, -h*0.16, w*0.12, h*0.13, -0.18, 0, Math.PI*2);
+      ctx.ellipse(w*0.08, -h*0.17, w*0.14, h*0.14, 0.16, 0, Math.PI*2);
+      ctx.ellipse(w*0.24, -h*0.10, w*0.10, h*0.12, 0.38, 0, Math.PI*2);
+      ctx.fill();
+      ctx.strokeStyle='rgba(191,245,155,.6)';
+      ctx.lineWidth=1.2;
+      for(let k=0;k<4;k++){
+        const px = (-0.18 + k*0.12)*w;
+        ctx.beginPath();
+        ctx.moveTo(px, h*0.03);
+        ctx.lineTo(px - w*0.03, -h*0.12);
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
   } }
 
   function drawCoins(){ for(const c of coins){ const r=10; ctx.save(); ctx.translate(c.x,c.y);
@@ -1761,6 +1893,168 @@ function initCaveStalactites(){
     ctx.fillStyle='#ffa94d'; ctx.fillRect(-7,-10,14,18);
     ctx.fillStyle='#fff'; ctx.fillRect(-5,-14,10,4);
     ctx.fillStyle='rgba(0,0,0,.15)'; ctx.strokeStyle='rgba(0,0,0,.15)'; ctx.strokeRect(-7,-10,14,18);
+    ctx.restore(); } }
+
+  function drawBananas(){ for(const b of bananas){ ctx.save(); ctx.translate(b.x,b.y); ctx.rotate(b.rot);
+
+    const bodyGrad = ctx.createLinearGradient(-15,-11,14,14);
+    bodyGrad.addColorStop(0,'#fff9b3');
+    bodyGrad.addColorStop(0.35,'#ffe45e');
+    bodyGrad.addColorStop(0.72,'#f7c325');
+    bodyGrad.addColorStop(1,'#d69300');
+
+    ctx.lineWidth=1.8;
+    ctx.strokeStyle='#8a5a00';
+    ctx.fillStyle=bodyGrad;
+
+    ctx.beginPath();
+    ctx.moveTo(-16,2);
+    ctx.quadraticCurveTo(-11,-12,3,-14);
+    ctx.quadraticCurveTo(15,-14,18,-5);
+    ctx.quadraticCurveTo(14,-2,9,0);
+    ctx.quadraticCurveTo(1,-1,-7,3);
+    ctx.quadraticCurveTo(-13,6,-16,2);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.fillStyle='#173f1c';
+    ctx.beginPath();
+    ctx.moveTo(-17,1);
+    ctx.quadraticCurveTo(-19,-5,-13,-5);
+    ctx.quadraticCurveTo(-10,-2,-12,3);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.fillStyle='#6b4d00';
+    ctx.beginPath();
+    ctx.moveTo(17,-6);
+    ctx.quadraticCurveTo(21,-6,20,-1);
+    ctx.quadraticCurveTo(18,2,14,1);
+    ctx.quadraticCurveTo(16,-1,17,-6);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.strokeStyle='rgba(255,255,255,.55)';
+    ctx.lineWidth=1.3;
+    ctx.beginPath();
+    ctx.moveTo(-9,-4);
+    ctx.quadraticCurveTo(0,-10,11,-8);
+    ctx.stroke();
+
+    ctx.strokeStyle='rgba(120,72,0,.38)';
+    ctx.lineWidth=1.1;
+    ctx.beginPath();
+    ctx.moveTo(-10,1);
+    ctx.quadraticCurveTo(0,-2,10,-3);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(-5,3);
+    ctx.quadraticCurveTo(3,0,13,-1);
+    ctx.stroke();
+
+    ctx.fillStyle='rgba(255,255,255,.18)';
+    ctx.beginPath();
+    ctx.ellipse(2,-7,4.5,2.2,-0.2,0,Math.PI*2);
+    ctx.fill();
+
+    ctx.restore(); } }
+
+  function drawCactuses(){ for(const c of cactuses){ ctx.save(); ctx.translate(c.x,c.y); ctx.rotate(c.rot || 0);
+    ctx.fillStyle='#2f9e44';
+    ctx.strokeStyle='#1f6f31';
+    ctx.lineWidth=1.6;
+    const rr=(x,y,w,h,r)=>{
+      ctx.beginPath();
+      ctx.moveTo(x+r,y);
+      ctx.arcTo(x+w,y,x+w,y+h,r);
+      ctx.arcTo(x+w,y+h,x,y+h,r);
+      ctx.arcTo(x,y+h,x,y,r);
+      ctx.arcTo(x,y,x+w,y,r);
+      ctx.closePath();
+    };
+    rr(-7,-16,14,32,5); ctx.fill(); ctx.stroke();
+    rr(-16,-6,8,16,4); ctx.fill(); ctx.stroke();
+    rr(8,-4,8,14,4); ctx.fill(); ctx.stroke();
+    rr(-12,-14,6,10,3); ctx.fill(); ctx.stroke();
+    rr(6,-13,6,9,3); ctx.fill(); ctx.stroke();
+
+    ctx.fillStyle='rgba(255,255,255,.16)';
+    rr(-4,-12,3,20,1.5); ctx.fill();
+    ctx.fillStyle='#c7f36b';
+    for(let k=0;k<10;k++){
+      const a = (k/10)*Math.PI*2 + (c.seed||0);
+      const px = Math.cos(a)*(5 + (k%2)*4);
+      const py = -2 + Math.sin(a)*11;
+      ctx.fillRect(px-0.8, py-0.8, 1.6, 1.6);
+    }
+    ctx.restore(); } }
+
+  function drawMosses(){ for(const m of mosses){ ctx.save(); ctx.translate(m.x,m.y); ctx.rotate(m.rot || 0);
+    const sway = Math.sin((m.seed||0) + performance.now()*0.004) * 0.8;
+
+    ctx.fillStyle='#345f2b';
+    ctx.beginPath();
+    ctx.ellipse(-6+sway*0.2,4,5.8,5.2,-0.35,0,Math.PI*2);
+    ctx.ellipse(0,2,7.5,6.3,0,0,Math.PI*2);
+    ctx.ellipse(7-sway*0.2,4,5.6,5.0,0.32,0,Math.PI*2);
+    ctx.fill();
+
+    ctx.fillStyle='#4b8a38';
+    ctx.beginPath();
+    ctx.ellipse(-8+sway*0.25,0,4.8,5.8,-0.45,0,Math.PI*2);
+    ctx.ellipse(-3,-3,5.6,6.7,-0.2,0,Math.PI*2);
+    ctx.ellipse(3,-4,6.1,7.2,0.18,0,Math.PI*2);
+    ctx.ellipse(9-sway*0.25,-1,4.7,5.7,0.42,0,Math.PI*2);
+    ctx.fill();
+
+    ctx.fillStyle='#6db54b';
+    for(let k=0;k<7;k++){
+      const a = -0.9 + k*0.3;
+      const len = 7 + (Math.sin((m.seed||0)*1.7 + k*1.2)+1)*2.4;
+      const bx = -8 + k*2.7;
+      const by = 3 + Math.sin(k*0.7 + (m.seed||0))*0.6;
+      ctx.beginPath();
+      ctx.moveTo(bx, by+4);
+      ctx.quadraticCurveTo(bx + Math.sin(a)*2.5, by-len*0.45, bx + Math.sin(a)*4.2, by-len);
+      ctx.quadraticCurveTo(bx + Math.sin(a)*1.4, by-len*0.65, bx+0.9, by+4);
+      ctx.closePath();
+      ctx.fill();
+    }
+
+    ctx.fillStyle='#86cf67';
+    for(let k=0;k<5;k++){
+      const px = -6 + k*3.5;
+      const py = -1 - (k%2)*2.4;
+      ctx.beginPath();
+      ctx.ellipse(px, py, 2.5, 1.5, -0.35 + k*0.18, 0, Math.PI*2);
+      ctx.fill();
+    }
+
+    ctx.strokeStyle='rgba(205,255,190,.32)';
+    ctx.lineWidth=1.2;
+    for(let k=0;k<4;k++){
+      const x = -4 + k*3.2;
+      ctx.beginPath();
+      ctx.moveTo(x, -3);
+      ctx.quadraticCurveTo(x+0.6, -7.5, x+1.6, -10.5);
+      ctx.stroke();
+    }
+
+    ctx.fillStyle='#2c4a22';
+    for(let k=0;k<4;k++){
+      const tx = -6 + k*4.1;
+      const h = 4.2 + ((k%2)*1.4);
+      ctx.beginPath();
+      ctx.moveTo(tx, 8);
+      ctx.lineTo(tx+1.4, 8);
+      ctx.lineTo(tx+0.7, 8+h);
+      ctx.closePath();
+      ctx.fill();
+    }
+
+    ctx.fillStyle='rgba(255,255,255,.18)';
+    ctx.beginPath(); ctx.ellipse(-2,-2,4.3,1.8,-0.25,0,Math.PI*2); ctx.fill();
     ctx.restore(); } }
 
   function drawFlakes(){ for(const f of flakes){ ctx.save(); ctx.translate(f.x,f.y);
@@ -1819,6 +2113,46 @@ function initCaveStalactites(){
 
       ctx.restore();
       ctx.globalAlpha = 1;
+    }
+  }
+
+  function drawBlizzards(){
+    for(const b of blizzards){
+      const i = b.lane;
+      const [left, right] = laneBounds(i);
+      const w = Math.max(1, right - left);
+      const x = left;
+      const y = 0;
+      const h = WORLD_H;
+      const progress = Math.max(0, Math.min(1, (BLIZZARD_DURATION - b.t) / BLIZZARD_SAFE_TIME));
+      const alpha = 0.12 + progress * 0.30;
+
+      ctx.save();
+      ctx.beginPath(); ctx.rect(x, y, w, h); ctx.clip();
+
+      const fog = ctx.createLinearGradient(x, y, x, y+h);
+      fog.addColorStop(0, `rgba(245,250,255,${0.03 + progress*0.08})`);
+      fog.addColorStop(0.5, `rgba(235,244,255,${alpha})`);
+      fog.addColorStop(1, `rgba(220,235,248,${0.05 + progress*0.10})`);
+      ctx.fillStyle = fog;
+      ctx.fillRect(x, y, w, h);
+
+      const time = frameNowMs * (130 + progress*70);
+      const pieces = 14 + Math.floor(progress * 34);
+      for(let j=0;j<pieces;j++){
+        const phase = (j*47 + (b.seed||0)*113) % 997;
+        const yy = ((phase + time*(0.32 + (j%5)*0.018)) % (h+40)) - 20;
+        const xx = x + 10 + (((j*29 + (b.seed||0)*59 + frameNowMs*0.02*(1+(j%3)*0.15)) % Math.max(18,w-20)));
+        const size = 2 + (j%3);
+        ctx.fillStyle = `rgba(248,252,255,${0.40 + progress*0.35})`;
+        ctx.fillRect(xx, yy, size, size + 2);
+        ctx.fillStyle = `rgba(214,230,245,${0.14 + progress*0.22})`;
+        ctx.fillRect(xx-1.5, yy-3, size+1, 3 + (j%2));
+      }
+
+      ctx.fillStyle = `rgba(255,255,255,${0.08 + progress*0.10})`;
+      ctx.fillRect(x, 0, w, 26 + progress*30);
+      ctx.restore();
     }
   }
 
@@ -2065,6 +2399,45 @@ function initCaveStalactites(){
     for(let i=0;i<count;i++){ const a=Math.random()*Math.PI*2, s=(Math.random()*spread);
       pushParticle({x,y,vx:Math.cos(a)*s*0.01,vy:Math.sin(a)*s*0.01+upBias,life:0.7+Math.random()*0.5,size:3+Math.random()*3,color,fade:1}); }
   }
+  function collectCoinAt(index, c){
+    wallet += c.value; saveSkins(); updateWallet(); addFloatText(c.x,c.y,'+'+c.value);
+    if(c.magnetPickup && equipped===MAGNET_SKIN_ID){
+      makePoof(player.x, player.y-34, '#ffd84a', 14, 90, -0.18);
+      makePoof(player.x, player.y-34, '#ff4b4b', 12, 85, -0.10);
+      makePoof(player.x, player.y-34, '#4b7dff', 12, 85, 0.10);
+      makePoof(player.x, player.y-34, '#ffffff', 10, 75, 0.00);
+      for(let s=0;s<8;s++){
+        pushParticle({
+          x: player.x + (Math.random()*12-6),
+          y: player.y - 34 + (Math.random()*8-4),
+          vx: Math.random()*180-90,
+          vy: -30 - Math.random()*120,
+          life: 0.18 + Math.random()*0.14,
+          color: (s%3===0 ? '#ff4b4b' : (s%3===1 ? '#4b7dff' : '#ffd84a')),
+          size: 2 + Math.random()*2
+        });
+      }
+    }
+    if(c.isBlue){
+      slowT = (equipped===10 ? SLOW_DURATION_ICE : SLOW_DURATION_DEFAULT); slowMul = SLOW_MUL;
+      if(equipped===10) invulnT = Math.max(invulnT, 1);
+      questFlakesUsed += 1;
+      saveQuestProgress();
+      updateSpecialShopUI();
+      makePoof(c.x,c.y,'#9fe8ff',28,130,-0.25);
+      beep({f:760,t:'sine',d:0.10,v:0.22});
+    }else if(c.isStone){
+      invulnT = Math.max(invulnT, 1.5);
+      stoneShieldT = Math.max(stoneShieldT, 1.5);
+      makePoof(c.x,c.y,'#cfcfcf',28,130,-0.2);
+      beep({f:520,t:'triangle',d:0.10,v:0.22});
+    }else{
+      makePoof(c.x,c.y,'#fff2a0',24,120,-0.3);
+      beep({f:880,t:'sine',d:0.08,v:0.22});
+    }
+    coins.splice(index,1);
+  }
+
   function lavaSplash(x){ makePoof(x,WORLD_H-LAVA_H+4,'#e67600',36,180,-0.4); }
   function drawParticles(dt){
     for(let i=particles.length-1;i>=0;i--){ const p=particles[i];
@@ -2079,7 +2452,7 @@ function initCaveStalactites(){
     return Math.floor(Math.random() * (maxLane + 1));
   }
   function nextFireBossAttackDelay(){
-    return 1 + Math.random()*2; // 1-3 секунды
+    return 1 + Math.random()*4; // 1-5 секунд
   }
   function resetFireBoss(){
     bossAttackTimer = nextFireBossAttackDelay();
@@ -2268,12 +2641,16 @@ function initCaveStalactites(){
     events = (gameMode==='normal') ? getNormalModeEvents(currentLevel) : [];
     for(const e of events){ e.warned=false; e.removed=false; e.idx=-1; }
     nextEndlessBonusAt=5; endlessBonusEarned=0; nextBiomeAt=50;
+    jungleScoreForBananas=0; nextBananaAt=nextBananaGap();
+    mountainsScoreForMoss=0; nextMossAt=nextMossGap();
+    desertScoreForCactuses=0; nextCactusAt=nextCactusGap();
+    winterScoreForBlizzards=0; nextBlizzardAt=nextBlizzardGap();
 
     player.lane=2; computeLaneX(); player.x=laneX[player.lane];
     player.y=WORLD_H-LAVA_H-110; player.jumping=false; player.falling=false; player.vYfall=0;
-    invulnT=0; stoneShieldT=0; angelLife=(equipped===4);
+    invulnT=0; stoneShieldT=0; bananaPowerT=0; cactusPowerT=0; cactusPowerCharges=0; angelLife=(equipped===4);
 
-    rocks.length=0; coins.length=0; juices.length=0; flakes.length=0; storms.length=0; particles.length=0; caveDrops.length=0;
+    rocks.length=0; coins.length=0; juices.length=0; bananas.length=0; mosses.length=0; cactuses.length=0; blizzards.length=0; flakes.length=0; storms.length=0; particles.length=0; caveDrops.length=0;
     wall=null;
     magmaFireFxT=0; magmaFireLane=-1;
     bombBlastFxT=0; bombBlastX=0; bombBlastY=0;
@@ -2387,6 +2764,7 @@ function initCaveStalactites(){
 
     timeElapsed+=dt; score+=dt;
     updateFireBoss(dt);
+    for(let i=0;i<laneRockFreezeT.length;i++) if(laneRockFreezeT[i]>0) laneRockFreezeT[i]=Math.max(0, laneRockFreezeT[i]-dt);
 
     if(gameMode==='normal' && score>=getLevelGoal(currentLevel)){
       beep({f:880,t:'triangle',d:0.25,v:0.22}); if(navigator.vibrate) navigator.vibrate([50,80,120]); endGame(true); return;
@@ -2407,6 +2785,56 @@ function initCaveStalactites(){
     }
 
     const scrollY=(timeElapsed*8)%1000;
+
+    if(gameMode==='endless' && bgMode==='mountains'){
+      mountainsScoreForMoss += dt;
+      while(mountainsScoreForMoss >= nextMossAt){
+        const opts=[]; for(let i=0;i<lanes.length;i++) if(lanes[i].state==='normal') opts.push(i);
+        if(opts.length){
+          const lane = opts[Math.floor(Math.random()*opts.length)];
+          mosses.push({ lane, x: laneX[lane], y: -30, speed: coinSpeed()*0.9, rot: (Math.random()*0.36 - 0.18), seed: Math.random()*6.283 });
+        }
+        nextMossAt += nextMossGap();
+      }
+    }
+
+    if(gameMode==='endless' && bgMode==='jungle'){
+      jungleScoreForBananas += dt;
+      while(jungleScoreForBananas >= nextBananaAt){
+        const opts=[]; for(let i=0;i<lanes.length;i++) if(lanes[i].state==='normal') opts.push(i);
+        if(opts.length){
+          const lane = opts[Math.floor(Math.random()*opts.length)];
+          bananas.push({ lane, x: laneX[lane], y: -34, speed: coinSpeed()*0.95, rot: (Math.random()*0.5 - 0.25) });
+        }
+        nextBananaAt += nextBananaGap();
+      }
+    }
+
+    if(gameMode==='endless' && bgMode==='desert'){
+      desertScoreForCactuses += dt;
+      while(desertScoreForCactuses >= nextCactusAt){
+        const opts=[]; for(let i=0;i<lanes.length;i++) if(lanes[i].state==='normal') opts.push(i);
+        if(opts.length){
+          const lane = opts[Math.floor(Math.random()*opts.length)];
+          cactuses.push({ lane, x: laneX[lane], y: -36, speed: coinSpeed()*0.92, rot: (Math.random()*0.24 - 0.12), seed: Math.random()*6.283 });
+        }
+        nextCactusAt += nextCactusGap();
+      }
+    }
+
+    if(gameMode==='endless' && bgMode==='winter'){
+      winterScoreForBlizzards += dt;
+      while(winterScoreForBlizzards >= nextBlizzardAt){
+        const opts=[]; for(let i=0;i<lanes.length;i++) if(lanes[i].state==='normal') opts.push(i);
+        if(opts.length){
+          const lane = opts[Math.floor(Math.random()*opts.length)];
+          blizzards.push({ lane, x: laneX[lane], t: BLIZZARD_DURATION, seed: Math.random()*10 });
+          makePoof(laneX[lane], player.y-40, '#e8f6ff', 16, 80, -0.18);
+          beep({f:540,t:'triangle',d:0.06,v:0.08});
+        }
+        nextBlizzardAt += nextBlizzardGap();
+      }
+    }
 
     // капли в пещере: падают именно из сталактитов
     if(gameMode==='normal' && currentLevel===4 && caveStalactites.length){
@@ -2437,7 +2865,7 @@ function initCaveStalactites(){
 
     if(gameMode==='endless' && Math.floor(score) >= nextEndlessBonusAt){
       wallet += 1; endlessBonusEarned += 1; saveSkins(); updateWallet();
-      nextEndlessBonusAt += 5; makePoof(40,40,'#fff2a0',14,90,-0.25); beep({f:960,t:'sine',d:0.08,v:0.2});
+      nextEndlessBonusAt += 5; beep({f:960,t:'sine',d:0.08,v:0.2});
       if(navigator.vibrate) navigator.vibrate(12);
     }
 
@@ -2478,6 +2906,12 @@ function initCaveStalactites(){
       s.x = laneX[s.lane];
       if(s.t<=0) storms.splice(i,1);
     }
+    for(let i=blizzards.length-1;i>=0;i--){
+      const b=blizzards[i]; b.t-=dt;
+      if(b.lane>=laneX.length){ blizzards.splice(i,1); continue; }
+      b.x = laneX[b.lane];
+      if(b.t<=0) blizzards.splice(i,1);
+    }
 
     if(gameMode==='normal'){
       for(const ev of events){
@@ -2494,8 +2928,13 @@ function initCaveStalactites(){
             if(player.lane===rm){ player.lane=Math.max(0,rm-1); } else if(player.lane>rm) player.lane-=1;
             for(let i=rocks.length-1;i>=0;i--){ if(rocks[i].lane===rm) rocks.splice(i,1); else if(rocks[i].lane>rm){ rocks[i].lane-=1; rocks[i].x=laneX[rocks[i].lane]; } }
             for(let i=coins.length-1;i>=0;i--){ if(coins[i].lane===rm) coins.splice(i,1); else if(coins[i].lane>rm){ coins[i].lane-=1; coins[i].x=laneX[coins[i].lane]; } }
+            for(let i=bananas.length-1;i>=0;i--){ if(bananas[i].lane===rm) bananas.splice(i,1); else if(bananas[i].lane>rm){ bananas[i].lane-=1; bananas[i].x=laneX[bananas[i].lane]; } }
+            for(let i=mosses.length-1;i>=0;i--){ if(mosses[i].lane===rm) mosses.splice(i,1); else if(mosses[i].lane>rm){ mosses[i].lane-=1; mosses[i].x=laneX[mosses[i].lane]; } }
+            for(let i=cactuses.length-1;i>=0;i--){ if(cactuses[i].lane===rm) cactuses.splice(i,1); else if(cactuses[i].lane>rm){ cactuses[i].lane-=1; cactuses[i].x=laneX[cactuses[i].lane]; } }
             for(let i=flakes.length-1;i>=0;i--){ if(flakes[i].lane===rm) flakes.splice(i,1); else if(flakes[i].lane>rm){ flakes[i].lane-=1; flakes[i].x=laneX[flakes[i].lane]; } }
             for(let i=storms.length-1;i>=0;i--){ if(storms[i].lane===rm) storms.splice(i,1); else if(storms[i].lane>rm){ storms[i].lane-=1; storms[i].x=laneX[storms[i].lane]; } }
+            for(let i=blizzards.length-1;i>=0;i--){ if(blizzards[i].lane===rm) blizzards.splice(i,1); else if(blizzards[i].lane>rm){ blizzards[i].lane-=1; blizzards[i].x=laneX[blizzards[i].lane]; } }
+            laneRockFreezeT.splice(rm,1);
             lanes.splice(rm,1); computeLaneX(); player.x=laneX[player.lane];
             makePoof(player.x,player.y,'#e8e2d8',36,160,-0.1); beep({f:180,t:'square',d:0.12,v:0.22}); if(navigator.vibrate) navigator.vibrate([40,60,40]);
           }
@@ -2509,7 +2948,7 @@ function initCaveStalactites(){
     spawnTimer-=dt*1000;
     if(spawnTimer<=0){
       spawnTimer=spawnInterval();
-      const opts=[]; for(let i=0;i<lanes.length;i++) if(lanes[i].state==='normal') opts.push(i);
+      const opts=[]; for(let i=0;i<lanes.length;i++) if(lanes[i].state==='normal' && !laneHasMossFreeze(i)) opts.push(i);
       if(opts.length){
         const lane=opts[Math.floor(Math.random()*opts.length)];
         const x=laneX[lane];
@@ -2546,20 +2985,37 @@ function initCaveStalactites(){
       }
     }
 
-    for(let i=rocks.length-1;i>=0;i--){ const r=rocks[i]; r.y+=r.speed*dt*slowMul; if(r.lane>=lanes.length){ rocks.splice(i,1); continue; } if(r.y-r.h/2>WORLD_H) rocks.splice(i,1); }
+    for(let i=rocks.length-1;i>=0;i--){ const r=rocks[i]; if(!laneHasMossFreeze(r.lane)) r.y+=r.speed*dt*slowMul; if(r.lane>=lanes.length){ rocks.splice(i,1); continue; } if(r.y-r.h/2>WORLD_H) rocks.splice(i,1); }
     for(let i=coins.length-1;i>=0;i--){ const c=coins[i];
-      if(equipped===MAGNET_SKIN_ID && Math.abs(c.lane-player.lane)===1){
-        c.x = player.x;
-        c.y = player.y;
+      const magnetLane = equipped===MAGNET_SKIN_ID && Math.abs(c.lane-player.lane)===1;
+      if(magnetLane && !c.magnetPulling){
+        c.magnetPulling = true;
         c.magnetPickup = true;
+        c.magnetPullT = 0;
+        c.magnetStartX = c.x;
+        c.magnetStartY = c.y;
+      }
+      if(c.magnetPulling){
+        c.magnetPullT += dt;
+        const t = Math.min(c.magnetPullT / MAGNET_PULL_DURATION, 1);
+        const ease = 1 - Math.pow(1 - t, 3);
+        c.x = c.magnetStartX + (player.x - c.magnetStartX) * ease;
+        c.y = c.magnetStartY + (player.y - c.magnetStartY) * ease;
+        if(t >= 1){
+          collectCoinAt(i, c);
+          continue;
+        }
       }else{
         c.y+=c.speed*dt;
       }
       if(c.lane>=lanes.length){ coins.splice(i,1); continue; }
-      if(c.y-10>WORLD_H) coins.splice(i,1);
+      if(!c.magnetPulling && c.y-10>WORLD_H) coins.splice(i,1);
     }
     for(let i=floatTexts.length-1;i>=0;i--){ const t=floatTexts[i]; t.y-=20*dt; t.life-=dt; if(t.life<=0) floatTexts.splice(i,1);} 
     for(let i=juices.length-1;i>=0;i--){ const j=juices[i]; j.y+=j.speed*dt; if(j.lane>=lanes.length){ juices.splice(i,1); continue; } if(j.y-10>WORLD_H) juices.splice(i,1); }
+    for(let i=bananas.length-1;i>=0;i--){ const b=bananas[i]; b.y+=b.speed*dt; if(b.lane>=lanes.length){ bananas.splice(i,1); continue; } if(b.y-14>WORLD_H) bananas.splice(i,1); }
+    for(let i=mosses.length-1;i>=0;i--){ const m=mosses[i]; m.y+=m.speed*dt; if(m.lane>=lanes.length){ mosses.splice(i,1); continue; } if(m.y-14>WORLD_H) mosses.splice(i,1); }
+    for(let i=cactuses.length-1;i>=0;i--){ const c=cactuses[i]; c.y+=c.speed*dt; if(c.lane>=lanes.length){ cactuses.splice(i,1); continue; } if(c.y-18>WORLD_H) cactuses.splice(i,1); }
     for(let i=flakes.length-1;i>=0;i--){ const f=flakes[i]; f.y+=f.speed*dt; if(f.lane>=lanes.length){ flakes.splice(i,1); continue; } if(f.y-10>WORLD_H) flakes.splice(i,1); }
 
     if(player.jumping){ player.jumpTime+=dt; const T=getJumpDuration(); let t=Math.min(player.jumpTime/T,1);
@@ -2569,8 +3025,25 @@ function initCaveStalactites(){
     if(!player.falling){
       if(invulnT>0) invulnT-=dt;
       if(stoneShieldT>0) stoneShieldT-=dt;
+      if(bananaPowerT>0) bananaPowerT-=dt;
+      if(cactusPowerT>0 && cactusPowerCharges>0){
+        cactusPowerT-=dt;
+        if(cactusPowerT<=0){ cactusPowerT=0; cactusPowerCharges=0; }
+      }
 
-      if(wall){
+      let blizzardHit = false;
+      for(const b of blizzards){ if(b.lane===player.lane){
+        const blizzardElapsed = BLIZZARD_DURATION - b.t;
+        if(blizzardElapsed < BLIZZARD_SAFE_TIME) continue;
+        if(angelLife && equipped===4 && invulnT<=0){
+          angelLife=false; invulnT=1.2; makePoof(player.x,player.y,'#e6f7ff',34,150,-0.18); beep({f:620,t:'triangle',d:0.16,v:0.2}); if(navigator.vibrate) navigator.vibrate([24,36,24]);
+        } else if(invulnT<=0){
+          player.falling=true; player.vYfall=0; makePoof(player.x,player.y-8,'#f3fbff',24,130,-0.18); beep({f:180,t:'triangle',d:0.14,v:0.22}); if(navigator.vibrate) navigator.vibrate([35,55]);
+          blizzardHit = true;
+        }
+        break;
+      } }
+      if(!blizzardHit && wall){
         let destroyed = false;
         for(let i=rocks.length-1;i>=0;i--){
           const r=rocks[i];
@@ -2589,7 +3062,25 @@ function initCaveStalactites(){
 
       for(const r of rocks){ if(r.lane===player.lane){
         if(Math.abs(player.x-r.x)<(PLAYER_W/2+r.w/2-6) && Math.abs(player.y-r.y)<(PLAYER_H/2+r.h/2-6)){
-          if(invulnT<=0 && angelLife && equipped===4){
+          if(bananaPowerT>0){
+            const idx=rocks.indexOf(r);
+            if(idx>=0) rocks.splice(idx,1);
+            wallet += 1; saveSkins(); updateWallet(); addFloatText(r.x,r.y,'+1');
+            makePoof(r.x,r.y,'#ffe082',28,150,-0.12);
+            makePoof(player.x,player.y-12,'#fff59d',12,80,-0.08);
+            beep({f:760,t:'triangle',d:0.08,v:0.2});
+            if(navigator.vibrate) navigator.vibrate(18);
+          } else if(cactusPowerT>0 && cactusPowerCharges>0){
+            const idx=rocks.indexOf(r);
+            if(idx>=0) rocks.splice(idx,1);
+            cactusPowerCharges = 0;
+            cactusPowerT = 0;
+            wallet += 1; saveSkins(); updateWallet(); addFloatText(r.x,r.y,'🌵 +1');
+            makePoof(r.x,r.y,'#8bc34a',28,150,-0.12);
+            makePoof(player.x,player.y-10,'#c5e1a5',12,85,-0.08);
+            beep({f:520,t:'triangle',d:0.09,v:0.2});
+            if(navigator.vibrate) navigator.vibrate(20);
+          } else if(invulnT<=0 && angelLife && equipped===4){
             angelLife=false; invulnT=1.2; makePoof(player.x,player.y,'#fff7b0',36,160,-0.2); beep({f:520,t:'triangle',d:0.18,v:0.22}); if(navigator.vibrate) navigator.vibrate([30,40,30]);
             const idx=rocks.indexOf(r); if(idx>=0) rocks.splice(idx,1);
           } else if(invulnT<=0){
@@ -2600,43 +3091,9 @@ function initCaveStalactites(){
       } }
 
       for(let i=coins.length-1;i>=0;i--){ const c=coins[i];
+        if(c.magnetPulling) continue;
         if(c.lane===player.lane){ if(Math.abs(player.x-c.x)<(PLAYER_W/2+8) && Math.abs(player.y-c.y)<(PLAYER_H/2+8)){
-          wallet += c.value; saveSkins(); updateWallet(); addFloatText(c.x,c.y,'+'+c.value);
-          if(c.magnetPickup && equipped===MAGNET_SKIN_ID){
-            makePoof(player.x, player.y-34, '#ffd84a', 14, 90, -0.18);
-            makePoof(player.x, player.y-34, '#ff4b4b', 12, 85, -0.10);
-            makePoof(player.x, player.y-34, '#4b7dff', 12, 85, 0.10);
-            makePoof(player.x, player.y-34, '#ffffff', 10, 75, 0.00);
-            for(let s=0;s<8;s++){
-              pushParticle({
-                x: player.x + (Math.random()*12-6),
-                y: player.y - 34 + (Math.random()*8-4),
-                vx: Math.random()*180-90,
-                vy: -30 - Math.random()*120,
-                life: 0.18 + Math.random()*0.14,
-                color: (s%3===0 ? '#ff4b4b' : (s%3===1 ? '#4b7dff' : '#ffd84a')),
-                size: 2 + Math.random()*2
-              });
-            }
-          }
-          if(c.isBlue){
-            slowT = (equipped===10 ? SLOW_DURATION_ICE : SLOW_DURATION_DEFAULT); slowMul = SLOW_MUL;
-            if(equipped===10) invulnT = Math.max(invulnT, 1);
-            questFlakesUsed += 1;
-            saveQuestProgress();
-            updateSpecialShopUI();
-            makePoof(c.x,c.y,'#9fe8ff',28,130,-0.25);
-            beep({f:760,t:'sine',d:0.10,v:0.22});
-          }else if(c.isStone){
-            invulnT = Math.max(invulnT, 1.5);
-            stoneShieldT = Math.max(stoneShieldT, 1.5);
-            makePoof(c.x,c.y,'#cfcfcf',28,130,-0.2);
-            beep({f:520,t:'triangle',d:0.10,v:0.22});
-          }else{
-            makePoof(c.x,c.y,'#fff2a0',24,120,-0.3);
-            beep({f:880,t:'sine',d:0.08,v:0.22});
-          }
-          coins.splice(i,1);
+          collectCoinAt(i, c);
         } }
       }
 
@@ -2645,6 +3102,41 @@ function initCaveStalactites(){
           invulnT = Math.max(invulnT, 5.0);
           makePoof(j.x,j.y,'#ffcf66',28,140,-0.3); beep({f:1000,t:'triangle',d:0.12,v:0.24});
           juices.splice(i,1);
+        } }
+      }
+
+      for(let i=bananas.length-1;i>=0;i--){ const b=bananas[i];
+        if(b.lane===player.lane){ if(Math.abs(player.x-b.x)<(PLAYER_W/2+11) && Math.abs(player.y-b.y)<(PLAYER_H/2+11)){
+          bananaPowerT = Math.max(bananaPowerT, 3);
+          addFloatText(b.x,b.y,'💪 3s');
+          makePoof(b.x,b.y,'#ffe082',24,120,-0.22);
+          makePoof(b.x,b.y-4,'#fff59d',12,80,-0.12);
+          beep({f:680,t:'triangle',d:0.10,v:0.22});
+          bananas.splice(i,1);
+        } }
+      }
+
+      for(let i=mosses.length-1;i>=0;i--){ const m=mosses[i];
+        if(m.lane===player.lane){ if(Math.abs(player.x-m.x)<(PLAYER_W/2+11) && Math.abs(player.y-m.y)<(PLAYER_H/2+12)){
+          const freezeLanes = getMossFreezeAffectedLanes(m.lane);
+          for(const lane of freezeLanes) laneRockFreezeT[lane] = Math.max(laneRockFreezeT[lane]||0, MOSS_ROCK_FREEZE_DURATION);
+          addFloatText(m.x,m.y,'🍃 3s');
+          makePoof(m.x,m.y,'#7bcf63',24,120,-0.22);
+          makePoof(m.x,m.y-3,'#bff59b',10,70,-0.1);
+          beep({f:620,t:'triangle',d:0.08,v:0.2});
+          mosses.splice(i,1);
+        } }
+      }
+
+      for(let i=cactuses.length-1;i>=0;i--){ const c=cactuses[i];
+        if(c.lane===player.lane){ if(Math.abs(player.x-c.x)<(PLAYER_W/2+12) && Math.abs(player.y-c.y)<(PLAYER_H/2+14)){
+          cactusPowerT = Math.max(cactusPowerT, 10);
+          cactusPowerCharges = 1;
+          addFloatText(c.x,c.y,'🌵 10s');
+          makePoof(c.x,c.y,'#8bc34a',24,120,-0.2);
+          makePoof(c.x,c.y-3,'#c5e1a5',10,70,-0.1);
+          beep({f:540,t:'triangle',d:0.09,v:0.2});
+          cactuses.splice(i,1);
         } }
       }
 
@@ -2693,10 +3185,11 @@ function initCaveStalactites(){
     drawLadders(scrollY);
     drawMagmaFireAbility();
     drawBombBlastAbility();
-    drawRocks(); drawCoins(); drawJuices(); drawFlakes();
+    drawRocks(); drawCoins(); drawJuices(); drawBananas(); drawMosses(); drawCactuses(); drawFlakes();
     if(floatTexts.length){ ctx.save(); ctx.textAlign='center'; ctx.font='bold 18px sans-serif'; ctx.fillStyle='#2a1a0e'; for(const t of floatTexts){ ctx.globalAlpha=Math.max(0,t.life); ctx.fillText(t.text,t.x,t.y);} ctx.restore(); }
     drawPlayer(); drawWall(); drawLava(); drawParticles(dt);
     drawStorms(); // поверх всего
+    drawBlizzards();
     ctx.fillStyle=renderCache.gradients.topShade; ctx.fillRect(0,0,WORLD_W,120);
     ctx.restore();
   }
